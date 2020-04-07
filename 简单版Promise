@@ -1,0 +1,151 @@
+const PENGING = 'pending'
+        const FULFILLED = 'fulfilled'
+        const REJECTED = 'rejected'
+
+        class Mypromise {
+            constructor(executor) {
+                this._status = PENGING
+                this._resolveQueue = [] // then收集的执行成功的回调队列
+                this._rejectQueue = [] // then收集的执行失败的回调队列
+
+                // 由于resolve/reject是在executor内部被调用, 因此需要使用箭头函数固定this指向, 否则找不到this._resolveQueue
+                const _resolve = (value) => {
+                    //把resolve执行回调的操作封装成一个函数,放进setTimeout里,以兼容executor是同步代码的情况
+                    const run = () => {
+                        // 从成功队列里取出回调依次执行
+                        if (this._status !== PENGING) return
+                        this._status = FULFILLED
+                        this._value = value  // 储存当前value
+
+                        // 这里之所以使用一个队列来储存回调,是为了实现规范要求的 "then 方法可以被同一个 promise 调用多次"
+                        // 如果使用一个变量而非队列来储存回调,那么即使多次p1.then()也只会执行一次回调
+                        while (this._resolveQueue.length) {
+                            const callback = this._resolveQueue.shift()
+                            callback(value)
+                        }
+                    }
+                    setTimeout(run)
+
+                }
+                const _reject = (value) => {
+                    const run = () => {
+                        // 从失败队列里取出回调依次执行
+                        if (this._status !== PENGING) return
+                        this._status = REJECTED
+                        this._value = value  // 储存当前value
+                        while (this._rejectQueue.length) {
+                            const callback = this._rejectQueue.shift()
+                            callback(value)
+                        }
+                    } 
+                    setTimeout(run)
+                }
+
+                executor(_resolve, _reject)
+            }
+
+            then(resolveFn, rejectFn) {
+                //  注意： 取得异步操作的返回值
+                //  根据规范，如果then的参数不是function，则我们需要忽略它, 让链式调用继续往下执行
+                typeof resolveFn !== 'function' ? resolveFn = value => value : null
+                typeof rejectFn !== 'function' ? rejectFn = reason => {
+                    throw new Error(reason instanceof Error ? reason.message : reason)
+                } : null
+
+                return new Mypromise((resolve, reject) => {
+                    const fulfilledFn = value => {
+                        try {
+                            let result = resolveFn(value)
+                            result instanceof Mypromise ? result.then(resolve, reject) : resolve(result)
+                        } catch (error) {
+                            reject(error)
+                        }
+                    }
+
+
+                    const rejectedFn = error => {
+                        try {
+                            let result = rejectFn(error)
+                            result instanceof Mypromise ? result.then(resolve, reject) : resolve(result)
+                        } catch (error) {
+                            reject(error)
+                        }
+                    }
+                    switch (this._status) {
+                        case PENGING:
+                            this._resolveQueue.push(fulfilledFn)
+                            this._rejectQueue.push(rejectedFn)
+                            break
+                        case FULFILLED:
+                            fulfilledFn(this._value)  //  this._value是上一个then回调return的值
+                            break
+                        case REJECTED:
+                            rejectedFn(this._value)
+                            break
+                    }
+
+                })
+            }
+            
+            catch(rejectFn){
+                //  catch方法其实就是执行一下then的第二个回调
+                return this.then(undefined, rejectFn)
+            }
+
+            finally(callback){
+                return this.then(
+                    value => Mypromise.resolve(callback()).then(() => value), // MyPromise.resolve执行回调,并在then中return结果传递给后面的Promise
+                    reason => Mypromise.resolve(callback()).then(() => { throw reason }) // reject同理
+                )
+            }
+
+            static resolve(value){
+                //静态的resolve方法
+                if(value instanceof Mypromise) return value  // 根据规范, 如果参数是Promise实例, 直接return这个实例
+                return new Mypromise(resolve => resolve(value))
+            }
+
+            static reject(reason){
+                return new Mypromise((resolve, reject) => reject(reason))
+            }
+
+            static all(promiseArr){
+                let index = 0
+                let result = []
+                return new Mypromise((resolve, reject) => {
+                    promiseArr.forEach((item, i) => {
+                        //Promise.resolve(item)用于处理传入值不为Promise的情况
+                        Mypromise.resolve(item).then(
+                            val => {
+                                index++
+                                result[i] = val
+                                //所有then执行后, resolve结果
+                                if(index === promiseArr.length){
+                                    resolve(result)
+                                }
+                            },
+                            err => {
+                                //有一个Promise被reject时，MyPromise的状态变为reject
+                                reject(err)
+                            }
+                        )
+                    })
+                })
+            }
+
+            static race(promiseArr){
+                return new Mypromise((resolve, reject) => {
+                    //同时执行Promise,如果有一个Promise的状态发生改变,就变更新MyPromise的状态
+                    for(let p of promiseArr){
+                        Mypromise.resolve(p).then(
+                            value => {
+                                resolve(value)
+                            },
+                            error => {
+                                reject(error)
+                            }
+                        )
+                    }
+                })
+            }
+        }
