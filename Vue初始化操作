@@ -1,0 +1,49 @@
+   在new  Vue时实际上是调用Vue的构造函数，该函数是位于vue-2.6.11\src\core\instance\index.js  目录下的。
+   该函数主要就是调用了_init函数做初始化。
+   那么 _init函数的定义是在  initMixin函数下。
+   initMixin函数下 主要做了以下操作。
+
+
+initLifecycle(vm)      /*初始化生命周期*/
+这个主要是给Vue实例上挂载了一些属性并设置了默认值
+
+
+initEvents(vm)        /*初始化事件*/
+     初始化事件函数initEvents实际上初始化的是父组件在模板中使用v-on或@注册的监听子组件内触发的事件。   
+     并把事件注册到子组件实例中的_events对象里。
+
+initRender(vm)         /*初始化render*/
+     初始化与渲染有关的属性，例如： slots  scopedSlots  $attrs  $listeners
+
+调用beforeCreate钩子函数
+
+initInjections(vm) // resolve injections before data/props
+initState(vm)    /*初始化props、methods、data、computed与watch*/
+initProvide(vm) // resolve provide after data/props
+callHook(vm, 'created')         /*调用created钩子函数并且触发created钩子事件*/
+
+
+
+initMixin之后是执行 stateMixin函数。
+该函数主要是在 Vue的原型上绑定 $data  $props  $watch  $set  $delete 的函数。
+
+
+
+eventsMixin 函数。
+该函数主要是在Vue的原型上绑定  $on  $once   $off  $emit
+
+
+
+lifecycleMixin 函数
+该函数主要是在Vue的原型上绑定   _update  $forceUpdate  $destroy
+
+_update函数是在挂载阶段传给 new Watch的第二个参数中，被 updateComponent函数里调用执行。
+
+
+renderMixin 函数
+该函数主要是在Vue的原型上绑定  $nextTick  _render 函数
+
+
+
+
+
